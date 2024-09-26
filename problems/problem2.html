@@ -25,7 +25,70 @@
     // todo: create a visualization that demonstrates your knowledge of quaternions.  This is intentionally
     // todo: open-ended.  Be as creative as you want, or feel free to recreate any of the visualizations
     // todo: found in Section 3.3.
+    let engine = ThreeEngine.new_default_3d();
+    let gui = get_default_lil_gui();
 
+    let settings = {
+        draw_wireframe: true,
+        theta_1: 0.0,
+        theta_2: 0.0,
+        theta_3: 0.0,
+        w: 0.0,
+        x: 0.0,
+        y: 0.0,
+        z: 0.0,
+        norm: 0.0
+    }
+
+    let actions = {
+        reset: function() {
+            settings.theta_1 = 0;
+            settings.theta_2 = 0;
+            settings.theta_3 = 0;
+            refresh_displays(gui);
+        }
+    };
+
+    gui.add(settings, 'draw_wireframe', true).name('Display Wireframe');
+    gui.add(settings, 'theta_1', -Math.PI, Math.PI).name('Theta 1');
+    gui.add(settings, 'theta_2', -Math.PI, Math.PI).name('Theta 2');
+    gui.add(settings, 'theta_3', -Math.PI, Math.PI).name('Theta 3');
+    gui.add(settings, 'w', -1, 1).name('w').disable();
+    gui.add(settings, 'x', -1, 1).name('x').disable();
+    gui.add(settings, 'y', -1, 1).name('y').disable();
+    gui.add(settings, 'z', -1, 1).name('z').disable();
+    gui.add(settings, 'norm', 0).name('norm').disable();
+    gui.add(actions, 'reset').name('reset');
+
+    let dummy_point = [0, 1, 2];
+
+    engine.add_suzanne_monkey_as_mesh_object(0x00eeff);
+    let standard_points = engine.get_local_vertex_positions_of_mesh_object(0);
+    let wireframe_points = engine.get_local_vertex_positions_of_mesh_object_wireframe(0);
+
+    engine.animation_loop(() => {
+        // convert thetas from GUI into quaternions
+        let qx = new Quaternion(Math.cos(settings.theta_1), [Math.sin(settings.theta_1), 0, 0]);
+        let qy = new Quaternion(Math.cos(settings.theta_2), [0, Math.sin(settings.theta_2), 0]);
+        let qz = new Quaternion(Math.cos(settings.theta_3), [0, 0, Math.sin(settings.theta_3)]);
+
+        let transform = qx.mul(qy).mul(qz);
+        let conj = transform.conjugate();
+
+        settings.w = transform.real().toString();
+        settings.x = transform.imag()[0].toString();
+        settings.y = transform.imag()[1].toString();
+        settings.z = transform.imag()[2].toString();
+        settings.norm = transform.norm().toString();
+        refresh_displays(gui);
+
+
+        let new_wireframe = wireframe_points.map(point => transform.mul(Quaternion(0, point)).mul(conj).toVector().slice(1));
+        engine.update_vertex_positions_of_mesh_object_wireframe(0, new_wireframe);
+
+        engine.mesh_objects[0].visible = false;
+        engine.set_mesh_object_wireframe_visibility(0, settings.draw_wireframe);
+    });
 </script>
 </body>
 </html>
