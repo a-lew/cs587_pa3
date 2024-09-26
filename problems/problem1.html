@@ -21,7 +21,9 @@
 <body>
 <script type="module">
     import {get_default_lil_gui, ThreeEngine, refresh_displays} from "../js/utils/utils_three.js";
-    import {add_matrix_matrix, mul_matrix_matrix, mul_matrix_scalar,
+    import {add_matrix_matrix, sub_matrix_matrix,
+            mul_matrix_matrix, mul_matrix_scalar,
+            identity_matrix,
             transpose,
             roll_list_into_matrix, roll_list_into_column_vec_matrix, unroll_matrix_to_list} from "../js/utils/utils_math.js";
 
@@ -84,6 +86,53 @@
                   [0, 0, 1]]
 
         return mul_matrix_matrix(mul_matrix_matrix(rx, ry), rz);
+    }
+
+    function trace(R) {
+      return R[0][0] + R[1][1] + R[2][2];
+    }
+
+    function so3_ln(R) {
+        let beta = Math.acos((trace(R) - 1) / 2);
+
+        if (Math.abs(beta) < 0.01) {
+            let scaling = (0.5 + (Math.pow(beta, 2) / 12) + (7 * Math.pow(beta, 4) / 720));
+            return mul_matrix_scalar(sub_matrix_matrix(R, transpose(R)), scaling);
+        } else if (beta == Math.PI) {
+            return [[0, -Math.PI * Math.sqrt(0.5 * (R[2][2] + 1)), Math.PI * Math.sqrt(0.5 * (R[1][1] + 1))],
+                    [Math.PI * Math.sqrt(0.5 * (R[2][2] + 1)), 0, -Math.PI * Math.sqrt(0.5 * (R[0][0] + 1))],
+                    [-Math.PI * Math.sqrt(0.5 * (R[1][1] + 1)), Math.PI * Math.sqrt(0.5 * (R[0][0] + 1)), 0]];
+        } else {
+            let scaling = beta / (2 * Math.sin(beta));
+            return mul_matrix_scalar(sub_matrix_matrix(R, transpose(R)), scaling);
+        }
+    }
+
+    function displacement(R1, t1, R2, t2) {
+        let R_prime = transpose(R1);
+        let t_prime = mul_matrix_matrix(R_prime, mul_matrix_scalar(t1, -1));
+        let disp_R = mul_matrix_matrix(R_prime, R2);
+        let disp_T = add_matrix_matrix(mul_matrix_matrix(R_prime, t2), t_prime);
+
+        let A = so3_ln(disp_R);
+        let beta = Math.sqrt(Math.pow(A[2][1], 2) + Math.pow(A[0][2], 2) + Math.pow(A[1][0], 2));
+        let p = 0;
+        let q = 0;
+        if (Math.abs(beta) < 0.001) {
+            p = 0.5 - (Math.pow(beta, 2) / 24) + (Math.pow(beta, 4) / 720);
+            q = (1/6) - (Math.pow(beta, 2) / 120) + (Math.pow(beta, 4) / 5040);
+        } else {
+            p = (1 - Math.cos(beta)) / Math.pow(beta, 2);
+            q = (beta - Math.sin(beta)) / Math.pow(beta, 3);
+        }
+
+        let C = add_matrix_matrix(identity_matrix(3),
+                                  add_matrix_matrix(mul_matrix_scalar(A, p),
+                                                    mul_matrix_scalar(mul_matrix_matrix(A, A), q)));
+        let b = mul_matrix_matrix(matrix_inverse_3x3(C), disp_T);
+
+        return Math.sqrt(Math.pow(A[2][1], 2) + Math.pow(A[0][2], 2) + Math.pow(A[1][0], 2)
+                         + Math.pow(b[0][0], 2) + Math.pow(b[1][0], 2) + Math.pow(b[2][0], 2));
     }
 
     let engine = ThreeEngine.new_default_3d();
@@ -152,6 +201,11 @@
 
         let R_1 = euler_angles(settings.theta_a_1, settings.theta_b_1, settings.theta_c_1);
         let t_1 = roll_list_into_column_vec_matrix([settings.tx_1, settings.ty_1, settings.tz_1]);
+        let R_2 = euler_angles(settings.theta_a_2, settings.theta_b_2, settings.theta_c_2);
+        let t_2 = roll_list_into_column_vec_matrix([settings.tx_2, settings.ty_2, settings.tz_2]);
+
+        settings.dist = displacement(R_1, t_1, R_2, t_2).toString();
+        refresh_displays(gui);
 
         let unit_x_1 = add_matrix_matrix(mul_matrix_matrix(R_1, unit_x_point), t_1);
         let unit_y_1 = add_matrix_matrix(mul_matrix_matrix(R_1, unit_y_point), t_1);
@@ -160,9 +214,6 @@
         engine.draw_debug_vector([settings.tx_1, settings.ty_1, settings.tz_1], unit_x_1, 0.035, undefined, 0xff3333);
         engine.draw_debug_vector([settings.tx_1, settings.ty_1, settings.tz_1], unit_y_1, 0.035, undefined, 0x33ff33);
         engine.draw_debug_vector([settings.tx_1, settings.ty_1, settings.tz_1], unit_z_1, 0.035, undefined, 0x3333ff);
-
-        let R_2 = euler_angles(settings.theta_a_2, settings.theta_b_2, settings.theta_c_2);
-        let t_2 = roll_list_into_column_vec_matrix([settings.tx_2, settings.ty_2, settings.tz_2]);
 
         let unit_x_2 = add_matrix_matrix(mul_matrix_matrix(R_2, unit_x_point), t_2);
         let unit_y_2 = add_matrix_matrix(mul_matrix_matrix(R_2, unit_y_point), t_2);
